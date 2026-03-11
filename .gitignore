@@ -36,6 +36,9 @@ bin/
 /nbdist/
 /.nb-gradle/
 
+### output folder ###
+output/
+
 ### VS Code ###
 .vscode/
 
