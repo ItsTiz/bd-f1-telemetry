@@ -1,31 +1,14 @@
+import TestSimpleRDD.inputFile
 import org.apache.spark.{SparkConf, SparkContext}
+import parsing.DatasetParser
 import utils.Commons
 
 object Test {
-  val inputFile = "/dataset/capra.txt"
-  val outputDir = "/output/myFirstWordCount" // The output directory should NOT exist
+    val inputFile = "/dataset/Miami_Grand_Prix/Sprint_Qualifying/VER/1_tel.json"
 
-  def main(args: Array[String]): Unit = {
-    // Create a SparkConf object; the configuration settings you put here will override those given in the Run/Debug configuration
-    val sparkConf = new SparkConf()
-      .setAppName("Word Count")
-    //.setMaster("local[4]") // not ideal if you plan to deploy this code to a remote cluster
-    val sc = new SparkContext(sparkConf)
-
-    if (args.length == 0) {
-      println("The first parameter should indicate the deployment mode (\"local\" or \"remote\")")
-      return
+    def main(args: Array[String]): Unit = {
+        implicit val sparkSession = Commons.initializeSparkSession("test_telemetry");
+        val parser = new DatasetParser();
+        parser.parseFile(Commons.getDatasetPath("local", inputFile));
     }
-    val deploymentMode = args(0)
-
-    val myRdd = sc.textFile(Commons.getDatasetPath(deploymentMode, inputFile), 4)
-    myRdd.
-      flatMap(_.split(" ")).
-      map(x => (x, 1)).
-      reduceByKey(_ + _).
-      map({ case (k, v) => (v, k) }).
-      sortByKey(false).
-      coalesce(1).
-      saveAsTextFile(Commons.getDatasetPath(deploymentMode, outputDir))
-  }
 }
