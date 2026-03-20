@@ -2,7 +2,7 @@ package parsing
 
 import org.apache.spark
 import org.apache.spark.sql.{Column, DataFrame, SQLImplicits, SparkSession}
-import org.apache.spark.sql.functions
+import org.apache.spark.sql.functions.{col, split, arrays_zip, inline}
 
 class DatasetParser(implicit spark: SparkSession) {
 
@@ -27,24 +27,27 @@ class DatasetParser(implicit spark: SparkSession) {
     }
 
     def toCSV(dataFrame: DataFrame, path: String): Unit = {
-        import spark.implicits._
         val dataFrameFlat = dataFrame.select("tel.*")
-        dataFrameFlat.prettyPrint("DataFrameFlat: ")
+
+        val dfWithKey = dataFrameFlat.withColumn("keyArray", split(col("dataKey"), "-"))
 
         val columnsNames: Array[String] = dataFrameFlat
             .columns
             .filter(e => e != "dataKey")
         val columns: Array[Column] = columnsNames.map(e => dataFrameFlat(e))
 
-        val zipped = functions.arrays_zip(columns:_*)
-        val dataFrameZipped = dataFrameFlat.withColumn("zipped", zipped);
-        dataFrameZipped.prettyPrint("dataFrameZipped: ")
+        val zipped = arrays_zip(columns:_*)
+        val dataFrameZipped = dfWithKey.withColumn("zipped", zipped);
 
-        val exploded = functions.inline(dataFrameZipped("zipped"))
-        //val columnsMap: Map[String, Column] = dataFrameFlat.columns.zip(exploded).toMap
+        val exploded = inline(dataFrameZipped("zipped"))
 
-        val dataFrameExploded = dataFrameZipped.select(exploded.as(columnsNames.toSeq));
-        dataFrameExploded.prettyPrint("dataFrameExploded: ")
+        val dataFrameExploded = dataFrameZipped.select(
+            col("keyArray").getItem(0).as("year"),
+            col("keyArray").getItem(1).as("event"),
+            col("keyArray").getItem(2).as("sessionType"),
+            col("keyArray").getItem(3).as("driverName"),
+            col("keyArray").getItem(4).as("lapNumber"),
+            exploded.as(columnsNames.toSeq));
 
         dataFrameExploded.write.csv(path)
     }

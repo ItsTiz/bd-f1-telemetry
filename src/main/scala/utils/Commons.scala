@@ -36,7 +36,7 @@ object Commons {
 
     def getDatasetPath(deploymentMode: String, localPath: String, remotePath: String): String = {
         if (deploymentMode == "local") {
-            return "file:///" + Config.projectDir + "/" + localPath
+            return Config.datasetPath + "/" + localPath
         }
         else if (deploymentMode == "sharedRemote") {
             return "s3a://" + Config.s3sharedBucketName + "/" + remotePath
