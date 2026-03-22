@@ -1,17 +1,16 @@
-import TestSimpleRDD.{inputFile, outputDir}
-import org.apache.spark.{SparkConf, SparkContext}
-import parsing.{DatasetParser, PathWalker}
+import org.apache.spark.sql.SparkSession
+import parsing.DatasetParser
 import utils.Commons
-import java.nio.file.Path
 
 object Test {
-    val inputDir = "/*/*/*/*_tel.json"
-    val outputDir = "/output/csv"
+    private val inputDir = "/*/*/*/*_tel.json"
+    private val outputDir = "/output/csv"
+    private val fullInputDir = Commons.getDatasetPath("local", inputDir)
+    private val fullOutputDir = Commons.getDatasetPath("local", outputDir)
 
     def main(args: Array[String]): Unit = {
-        implicit val sparkSession = Commons.initializeSparkSession("test_telemetry");
+        implicit val sparkSession: SparkSession = Commons.initializeSparkSession("test_telemetry");
         val parser = new DatasetParser();
-        val dataFrame = parser.parseTelemetryFile(Commons.getDatasetPath("local", inputDir));
-        parser.toCSV(dataFrame, Commons.getDatasetPath("local", outputDir))
+        parser.jsonToCSV(fullInputDir, fullOutputDir);
     }
 }

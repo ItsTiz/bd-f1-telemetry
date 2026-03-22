@@ -4,7 +4,7 @@ import org.apache.spark
 import org.apache.spark.sql.{Column, DataFrame, SQLImplicits, SparkSession}
 import org.apache.spark.sql.functions.{col, split, arrays_zip, inline}
 
-class DatasetParser(implicit spark: SparkSession) {
+class DatasetParser(implicit spark: SparkSession) extends Parser {
 
     implicit class DataFramePrinter(df: DataFrame) {
         def prettyPrint(header: String): Unit = {
@@ -17,7 +17,7 @@ class DatasetParser(implicit spark: SparkSession) {
         }
     }
 
-    def parseTelemetryFile(path: String): DataFrame = {
+    override def jsonToDataFrame(path: String): DataFrame = {
         val dfReader = spark.read;
         // sets reader to treat normal JSON files
         dfReader.option("multiLine", value = true);
@@ -26,7 +26,7 @@ class DatasetParser(implicit spark: SparkSession) {
         resultDF;
     }
 
-    def toCSV(dataFrame: DataFrame, path: String): Unit = {
+    override def dataFrameToCSV(dataFrame: DataFrame, destPath: String): Unit = {
         val dataFrameFlat = dataFrame.select("tel.*")
 
         val dfWithKey = dataFrameFlat.withColumn("keyArray", split(col("dataKey"), "-"))
@@ -49,6 +49,6 @@ class DatasetParser(implicit spark: SparkSession) {
             col("keyArray").getItem(4).as("lapNumber"),
             exploded.as(columnsNames.toSeq));
 
-        dataFrameExploded.write.csv(path)
+        dataFrameExploded.write.csv(destPath)
     }
 }
