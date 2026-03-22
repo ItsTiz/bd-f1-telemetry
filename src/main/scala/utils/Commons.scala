@@ -13,6 +13,14 @@ object Commons {
 
     import DeploymentMode._
 
+    implicit class PathBuilder(path: String) {
+
+        def toFullLocalPath: String = {
+            getDatasetPath("local", path)
+        }
+
+    }
+
     def initializeSparkSession(name: String): SparkSession = {
         import org.apache.spark.sql.SparkSession
         SparkSession

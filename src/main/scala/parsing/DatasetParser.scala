@@ -3,28 +3,9 @@ package parsing
 import org.apache.spark
 import org.apache.spark.sql.{Column, DataFrame, SQLImplicits, SparkSession}
 import org.apache.spark.sql.functions.{col, split, arrays_zip, inline}
+import parsing.DataFrameExtensions._
 
 class DatasetParser(implicit spark: SparkSession) extends Parser {
-
-    implicit class DataFramePrinter(df: DataFrame) {
-        def prettyPrint(header: String): Unit = {
-            println(header)
-            println("Schema: ")
-            df.printSchema()
-            println("Show: ")
-            df.show()
-            println("---")
-        }
-    }
-
-    override def jsonToDataFrame(path: String): DataFrame = {
-        val dfReader = spark.read;
-        // sets reader to treat normal JSON files
-        dfReader.option("multiLine", value = true);
-        val resultDF = dfReader.json(path);
-        resultDF.prettyPrint("schema of " + path +": ")
-        resultDF;
-    }
 
     override def dataFrameToCSV(dataFrame: DataFrame, destPath: String): Unit = {
         val dataFrameFlat = dataFrame.select("tel.*")

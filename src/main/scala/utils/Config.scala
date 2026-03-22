@@ -5,6 +5,7 @@ object Config {
   // The local directory containing this repository
   val projectDir :String = "C:/Users/Tiziano/Desktop/Tiziano/UNI/Magistrale/Corsi/second-year/BD/project/f1-telemetry"
 
+  // The local directory containing the dataset
   val datasetPath :String = "C:/Users/Tiziano/Desktop/Tiziano/UNI/Magistrale/Corsi/second-year/BD/project/dataset"
 
   // The name of the shared bucket on AWS S3 to read datasets (so you don't need to upload them in your bucket)
