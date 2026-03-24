@@ -30,6 +30,9 @@ class DatasetParser(implicit spark: SparkSession) extends Parser {
             col("keyArray").getItem(4).as("lapNumber"),
             exploded.as(columnsNames.toSeq));
 
-        dataFrameExploded.write.csv(destPath)
+        dataFrameExploded
+            .write
+            .option("header", "true")
+            .csv(destPath)
     }
 }

@@ -1,5 +1,5 @@
 import org.apache.spark.sql.SparkSession
-import parsing.{DatasetParser, DriversParser}
+import parsing.{DatasetParser, DriversParser, LapTimesParser}
 import utils.Commons
 import utils.Commons._
 
@@ -14,10 +14,15 @@ object Test {
     private val fullDSInputDir = dsInputDir.toFullLocalPath
     private val fullDSOutputDir = dsOutputDir.toFullLocalPath
 
+    private val ltInputDir = "/*/*/*/laptimes.json"
+    private val ltOutputDir = "/output/laptimes"
+    private val fullLTInputDir = ltInputDir.toFullLocalPath
+    private val fullLTOutputDir = ltOutputDir.toFullLocalPath
+
+
     def main(args: Array[String]): Unit = {
         implicit val sparkSession: SparkSession = Commons.initializeSparkSession("test_telemetry");
-        val parser = new DriversParser();
-        //parser.jsonToDataFrame(fullDrvInputDir)
-        parser.jsonToCSV(fullDrvInputDir, fullDrvOutputDir);
+        val parser = new LapTimesParser();
+        parser.jsonToCSV(fullLTInputDir, fullLTOutputDir);
     }
 }

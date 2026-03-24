@@ -11,7 +11,7 @@ class DriversParser (implicit spark: SparkSession) extends Parser {
 
         val filteredDf = inlinedDf.select(
             col("driver").alias("driverName"),
-            col("team"), // Keeps the name "team"
+            col("team"),
             col("dn").alias("driverNumber"),
             col("fn").alias("firstName"),
             col("ln").alias("lastName")
@@ -19,6 +19,9 @@ class DriversParser (implicit spark: SparkSession) extends Parser {
 
         filteredDf.prettyPrint("drivers: ")
 
-        filteredDf.write.csv(outPath)
+        filteredDf
+            .write
+            .option("header", "true")
+            .csv(outPath)
     }
 }
