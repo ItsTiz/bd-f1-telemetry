@@ -1,7 +1,7 @@
 package parsing
 
 import org.apache.spark.sql.{Column, DataFrame, SparkSession}
-import org.apache.spark.sql.functions.{arrays_zip, col, inline, input_file_name, split, element_at, url_decode}
+import org.apache.spark.sql.functions.{arrays_zip, col, inline, input_file_name, split, element_at, url_decode, size}
 import DataFrameExtensions._
 class LapTimesParser(implicit spark: SparkSession) extends Parser {
     private val columnDictionary = Map(
@@ -10,6 +10,7 @@ class LapTimesParser(implicit spark: SparkSession) extends Parser {
         "time" -> "lapTime",
         "pb"   -> "isPersonalBest",
         "pos"  -> "position",
+        "pout"  -> "pitOut",
         "compound" -> "tyreCompound",
         "life" -> "tyreAgeLaps",
         "stint" -> "stintNumber",
@@ -30,7 +31,7 @@ class LapTimesParser(implicit spark: SparkSession) extends Parser {
     )
 
     private val selectedColumnNames = List(
-        "team", "drv", "dNum", "lap", "time", "pb", "pos",
+        "team", "drv", "dNum", "lap", "time", "pb", "pos", "pout",
         "compound", "life", "stint",
         "s1", "s2", "s3", "vi1", "vi2", "vfl", "vst",
         "wAT", "wH",  "wP", "wR", "wTT", "wWD", "wWS"
@@ -52,14 +53,17 @@ class LapTimesParser(implicit spark: SparkSession) extends Parser {
             col(oldName).alias(newDescriptiveName)
         }
 
+        val dataFrameWithTotalLaps = dataFrame.withColumn("totalLaps", size(col("lap")))
+
         val zipped = arrays_zip(columns: _*)
-        val dataFrameZipped = dataFrame.withColumn("zipped", zipped)
+        val dataFrameZipped = dataFrameWithTotalLaps.withColumn("zipped", zipped)
 
         val uriColumn = col("full_file_uri")
 
         val dataFrameExploded = dataFrameZipped.select(
             url_decode(element_at(uriColumn, -4)).as("event"),
             url_decode(element_at(uriColumn, -3)).as("sessionType"),
+            col("totalLaps"),
             inline(col("zipped"))
         )
 
@@ -67,6 +71,7 @@ class LapTimesParser(implicit spark: SparkSession) extends Parser {
             .withColumn("lap", col("lap").cast("int"))
             .withColumn("stintNumber", col("stintNumber").cast("int"))
             .withColumn("tyreAgeLaps", col("tyreAgeLaps").cast("int"))
+            .withColumn("totalLaps", col("totalLaps").cast("int"))
 
         finalCleanedDf
             .write
