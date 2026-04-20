@@ -1,0 +1,48 @@
+package job_vuksan
+
+object AggregationFunctions {
+    // Defining the accumulator case class (maxAccY, brakeSum, rpmSum, totalHighSpeedThrottleRows, totalRows)
+    case class TelemetryAcc(
+                               maxAccY: Double,
+                               brakeSum: Double,
+                               rpmSum: Double,
+                               totalHighSpeedThrottleRows: Long,
+                               totalRows: Long
+                           )
+
+    // sequencing function on (acc_y, brake, rpm, speed, throttle) to calc average and give as a result (max_acc_y, sum_brake, sum_rpm, rows_throttle_speed_threshold, total_rows)
+    val seqFunc: (TelemetryAcc, (Double, Int, Double, Double, Double)) => TelemetryAcc = {
+        case (TelemetryAcc(maxAcc, brakeSum, rpmSum, countHigh, totalRows), (accY, brake, rpm, speed, throttle)) =>
+
+            val (newRpmSum, newCountHigh) = if (speed > 120 && throttle > 35) {
+                (rpmSum + rpm, countHigh + 1L)
+            } else {
+                (rpmSum, countHigh)
+            }
+
+            TelemetryAcc(if (accY > maxAcc) accY else maxAcc,
+                brakeSum + brake,
+                newRpmSum,
+                newCountHigh,
+                totalRows + 1L)
+    }
+
+    // combining function between partitions
+    val combFunc: (TelemetryAcc, TelemetryAcc) => TelemetryAcc = {
+        case (TelemetryAcc(max1, brake1, rpm1, high1, total1), TelemetryAcc(max2, brake2, rpm2, high2, total2)) =>
+            TelemetryAcc(if (max1 > max2) max1 else max2,
+                brake1 + brake2,
+                rpm1 + rpm2,
+                high1 + high2,
+                total1 + total2)
+    }
+
+    // mapFunc - final transformation after aggregation
+    val mapFunc: TelemetryAcc => (Double, Double, Double) = {
+        case TelemetryAcc(maxAccY, brakeSum, rpmSum, countHigh, totalRows) =>
+
+            (maxAccY,
+            brakeSum / totalRows,
+            if (countHigh > 0) rpmSum / countHigh else rpmSum)
+    }
+}

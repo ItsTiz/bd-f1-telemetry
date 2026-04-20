@@ -9,7 +9,7 @@ object Config {
   val datasetPath :String = "C:/Users/Tiziano/Desktop/Tiziano/UNI/masters/courses/second-year/BD/project/f1-telemetry/dataset"
 
   // The name of the shared bucket on AWS S3 to read datasets (so you don't need to upload them in your bucket)
-  val s3sharedBucketName :String = "unibo-bd2526-egallinucci-shared"
+  val s3sharedBucketName :String = "unibo-bd2526-tvuksan-shared"
   // The name of your bucket on AWS S3
   val s3bucketName :String = "unibo-bd2526-f1tel"
   // The path to the credentials file for AWS (if you follow instructions, this should not be updated)
