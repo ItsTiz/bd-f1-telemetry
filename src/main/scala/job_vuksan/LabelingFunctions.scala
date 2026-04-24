@@ -14,7 +14,7 @@ object LabelingFunctions {
 
         val score =
             (if (maxAccY > accYMean) 1 else 0) +
-            (if (avgBrake > brakeMean) 1 else 0) +
+            (if (avgBrake < brakeMean) 1 else 0) +
             (if (avgRpm > rpmMean) 1 else 0)
 
         val style = score match {
@@ -32,6 +32,10 @@ object LabelingFunctions {
         val lapOnTyre = rowValue._2.tyreAgeLaps    // tyreAgeLaps
         val compound  = rowValue._2.tyreCompound      // tyreCompound
         val lapNumber = rowValue._2.lap   // absolute lap in race
+
+        if (lapOnTyre <= 2 && (compound == "HARD" || compound == "MEDIUM")) {
+            return (rowValue, "DROP")
+        }
 
         // Drop out-laps
         if (lapOnTyre == 1) {

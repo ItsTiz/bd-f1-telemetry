@@ -27,30 +27,14 @@ object StyleTireWear {
             writeMode = "remote"
         }
 
-        // Create a SparkConf object;
-        // the configuration settings you put here will override those given in the Run/Debug configuration
         val sparkConf = new SparkConf()
             .setAppName("style-tire-wear-job")
-
-            // === Best settings for m4.large (2 vCPU, 8GB per node) ===
-            .set("spark.executor.instances", "3")           // 1 per node + 1 extra
-            .set("spark.executor.cores", "1")               // MUST be 1
-            .set("spark.executor.memory", "4g")
-            .set("spark.executor.memoryOverhead", "800m")   // Important
-
-            .set("spark.driver.memory", "2g")
-            .set("spark.driver.cores", "1")
-
-            // Performance
-            .set("spark.default.parallelism", "12")
-            .set("spark.sql.shuffle.partitions", "12")
-            .set("spark.dynamicAllocation.enabled", "false")
         val spark = SparkSession.builder.config(sparkConf).getOrCreate()
         val sqlContext = spark.sqlContext // needed to save as CSV
         val sparkContext: SparkContext = spark.sparkContext
         import sqlContext.implicits._
 
-        // Initialize input datasets
+        // Initializing input datasets
         val rddTelemetry = sparkContext.textFile(Commons.getDatasetPath(deploymentMode, path_ml_telemetry))
         val rddLapTimes = sparkContext.textFile(Commons.getDatasetPath(deploymentMode, path_ml_laptimes))
 
@@ -63,11 +47,14 @@ object StyleTireWear {
         val rddTelemetryKV = rddTelemetry
             .filter(row => row != columnNames(0)) //skip the header column names
             .flatMap(F1DataParsing.parseTelemetryRow)
-            .filter(row => row._2.rel_distance != "None") // if rel_distance is None then all telemetry seems to be invalid
-            .map(row => (row._1, (row._2.acc_y, row._2.brake, row._2.rpm, row._2.speed, row._2.throttle)))
+            .filter(row => row._2.rel_distance != "None" && row._1.sessionType.equals("Race")) // if rel_distance is None then all telemetry seems to be invalid
+            .map(row => (
+                (row._1.event, row._1.driveCodeName),
+                (row._2.acc_y, row._2.brake, row._2.rpm, row._2.speed, row._2.throttle)
+            ))
 
         val rddDrivingStyleParams = rddTelemetryKV
-            .aggregateByKey(AggregationFunctions.TelemetryAcc(-30.0, 0, 0, 0, 0))(
+            .aggregateByKey(AggregationFunctions.TelemetryAcc(List.empty, 0, 0, 0, 0))(
                 AggregationFunctions.seqFunc, AggregationFunctions.combFunc)
             .mapValues(AggregationFunctions.mapFunc)
 
@@ -76,23 +63,48 @@ object StyleTireWear {
         //  acceleration and high rpms
         //  one category higher than the average is considered balanced, the rest is conservative
         //  as averages we take 30 m/s^2 as the high threshold, braking percentage 20% and rpms around 10500
-        val acc_y_mean_threshold = rddDrivingStyleParams.map(row => row._2._1).mean()
-        val brake_mean_threshold = rddDrivingStyleParams.map(row => row._2._2).mean()
-        val rpms_mean_threshold = rddDrivingStyleParams.map(row => row._2._3).mean()
+
+        // Note: Maybe these should be grouped by TrackID rather than globally, because it depends on track
+        //        val acc_y_mean_threshold = rddDrivingStyleParams.map(row => row._2._1).mean()
+        //        val brake_mean_threshold = rddDrivingStyleParams.map(row => row._2._2).mean()
+        //        val rpms_mean_threshold = rddDrivingStyleParams.map(row => row._2._3).mean()
+
+        //        val rddTelemetryWStyle = rddDrivingStyleParams
+        //            .mapValues(
+        //                line => LabelingFunctions.assignDrivingStyle(line)
+        //                (
+        //                    acc_y_mean_threshold,
+        //                    brake_mean_threshold,
+        //                    rpms_mean_threshold
+        //                ))
+
+        val trackBaselines = rddDrivingStyleParams
+            .map { case ((event, _), stats) => (event, stats) }
+            .aggregateByKey((0.0, 0.0, 0.0, 0L))(
+                { case ((sA, sB, sR, count), (acc, brk, rpm)) =>
+                    (sA + acc, sB + brk, sR + rpm, count + 1L)
+                },
+                { case ((sA1, sB1, sR1, c1), (sA2, sB2, sR2, c2)) =>
+                    (sA1 + sA2, sB1 + sB2, sR1 + sR2, c1 + c2)
+                }
+            )
+            .mapValues { case (sumAcc, sumBrk, sumRpm, count) =>
+                (sumAcc / count, sumBrk / count, sumRpm / count)
+            }
 
         val rddTelemetryWStyle = rddDrivingStyleParams
-            .mapValues(
-                line => LabelingFunctions.assignDrivingStyle(line)
-                (
-                    acc_y_mean_threshold,
-                    brake_mean_threshold,
-                    rpms_mean_threshold
-                ))
+            .map { case ((event, driver), stats) => (event, ((event, driver), stats)) }
+            .join(trackBaselines)
+            .map { case (event, (((event_dup, driver), stats), (trackAccMean, trackBrkMean, trackRpmMean))) =>
+                val style = LabelingFunctions.assignDrivingStyle(stats)(trackAccMean, trackBrkMean, trackRpmMean)
+                ((event, driver), style)
+            }
 
         val rddLapTimesKV = rddLapTimes
             .filter(row => row != columnNamesLaptimes(0))
             .flatMap(F1DataParsing.parseLaptimesRow)
-            .filter(row => row._2.lapTime != 0.0 && !row._2.tyreCompound.isEmpty && row._2.tyreAgeLaps != 0)
+            .filter(row => row._1.sessionType.equals("Race") && row._2.lapTime != 0.0 && row._2.tyreCompound.nonEmpty && row._2.tyreAgeLaps != 0)
+            .map(row => ((row._1.event, row._1.driveCodeName), row._2))
 
         val joinedRDD = rddTelemetryWStyle.join(rddLapTimesKV)
 
@@ -103,17 +115,18 @@ object StyleTireWear {
                 row._1._1,
                 row._1._2.tyreCompound,
                 row._2,
-                row._1._2.lapTime + ((100 * (1 - row._1._2.lap / row._1._2.totalLaps)) * 0.03),
+                row._1._2.lapTime - ((100 * (1 - row._1._2.lap.toDouble / row._1._2.totalLaps.toDouble)) * 0.03),
                 row._1._2.lap,
                 row._1._2.totalLaps,
                 row._1._2.pitOut, 1)
             )
-            .filter(row => row._1.sessionType.equals("Race") && row._2._7.equals("None") && row._2._5 > 3)
+            //INTERMEDIATE AND WET data seems to have some off-the-charts data, removing them
+            .filter(row => row._2._7.equals("None") && row._2._5 > 3 && row._2._2 != "INTERMEDIATE" && row._2._2 != "WET")
 
         val finalRdd = joinedRddLabeled
-            .map(row => ((row._2._1, row._2._2, row._2._3), row._2._4)) //new key
-            .groupByKey() // Group all lap times by (style, compound, state)
-            .mapValues { times => // times: Iterable[Double]
+            .map(row => ((row._1._1, row._2._1, row._2._2, row._2._3), row._2._4))
+            .groupByKey()
+            .mapValues { times =>
                 val sortedTimes = times.toArray.sorted
                 val count = sortedTimes.length
                 val median = if (count > 0) sortedTimes(count / 2) else 0.0
@@ -122,9 +135,58 @@ object StyleTireWear {
                 (median, count, mean)
             }
 
-        finalRdd
+        val dropoffRdd = finalRdd
+            // Shifting state out of the key and into the value part
+            .map { case ((event, style, compound, state), (median, count, mean)) =>
+                ((event, style, compound), (state, median, count))
+            }
+            .groupByKey()
+            .mapValues { items =>
+                val opt = items.find(_._1 == "OPTIMAL")
+                val deg = items.find(_._1 == "DEGRADED")
+
+                val optMed = opt.map(_._2).getOrElse(0.0)
+                val degMed = deg.map(_._2).getOrElse(0.0)
+                val optCnt = opt.map(_._3).getOrElse(0)
+                val degCnt = deg.map(_._3).getOrElse(0)
+
+                val dropoff = if (opt.isDefined && deg.isDefined) degMed - optMed else 0.0
+
+                (optMed, degMed, dropoff, optCnt, degCnt)
+            }
+
+        dropoffRdd
+            .map { case ((event, style, compound), (optMed, degMed, dropoff, optCnt, degCnt)) =>
+                // Helper function to round to 3 decimal places for a clean CSV
+                def round3(v: Double): Double = BigDecimal(v).setScale(3, BigDecimal.RoundingMode.HALF_UP).toDouble
+
+                (
+                    event.toString,
+                    style,
+                    compound,
+                    round3(optMed),
+                    round3(degMed),
+                    round3(dropoff),
+                    optCnt,
+                    degCnt
+                )
+            }
+            // Filtering out rows that are missing one of the two states,
+            // otherwise drop-off calculation is meaningless, cosnidering both acceptable if above 15 laps per tyre type
+            .filter(row => row._7 >= 15 && row._8 >= 15)
             .coalesce(1)
-            .toDF().write.format("csv").mode(SaveMode.Overwrite)
+            .toDF(
+                "event",
+                "style",
+                "tyre_compound",
+                "optimal_median",
+                "degraded_median",
+                "pace_dropoff_s",
+                "optimal_count",
+                "degraded_count"
+            ).write.format("csv").option("header", "true").mode(SaveMode.Overwrite)
             .save(Commons.getDatasetPath(writeMode, path_output_tireWearOnStyle))
+
+        spark.stop()
     }
 }
