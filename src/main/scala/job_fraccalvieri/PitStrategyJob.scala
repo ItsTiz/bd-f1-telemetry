@@ -81,15 +81,15 @@ object PitStrategyJob {
       .map { case (key, lap) =>
         ((key.event, key.driverCode), (lap.lap, lap.lapTime))
       }
-      .groupByKey()   // SHUFFLE 1
+      .groupByKey()
       .mapValues { laps =>
         val ordered = laps.toList.sortBy(_._1)
         val totalTime = ordered.map(_._2).sum
         val finalLap = ordered.last._1
         (finalLap, totalTime)
       }
-      .filter { case (_, (finalLap, totalTime)) =>
-        totalTime > 0
+      .filter { case (_, (_, totalTime)) =>
+        totalTime > 0   // filtro DNF
       }
 
     // CLASSIFICA POSIZIONI
@@ -98,7 +98,7 @@ object PitStrategyJob {
       .map { case ((event, driver), (_, totalTime)) =>
         (event, (driver, totalTime))
       }
-      .groupByKey()   // SHUFFLE 2
+      .groupByKey()
       .flatMap { case (event, drivers) =>
         drivers.toList
           .sortBy(_._2)
@@ -120,7 +120,7 @@ object PitStrategyJob {
     val prepared = joined.map {
       case ((event, driver), (lap, (pos, totalTime))) =>
         (
-          (event, driver),   // ⚠️ FIX: chiave corretta
+          (event, driver),
           (lap.stintNumber, lap.lapTime, lap.tyreCompound)
         )
     }
@@ -151,32 +151,41 @@ object PitStrategyJob {
 
     val classified = aggregated.map {
       case ((event, driver), (_, _, _, avgStint, compounds)) =>
-
         val strategy = assignStrategy(compounds, avgStint)
-
-        (driver, (event, strategy))
+        ((event, driver), strategy)
     }
 
-    // JOIN DRIVER INFO
+    // AGGIUNTA PERFORMANCE
 
-    val withDriverInfo = classified
+    val withPerformance = classified.join(rankedRDD)
+
+    val enriched = withPerformance
+      .map { case ((event, driver), (strategy, (pos, totalTime))) =>
+        (driver, (event, strategy, pos, totalTime))
+      }
       .join(driversKV)
       .map {
-        case (driver, ((event, strategy), (team, number))) =>
-          ((strategy, event, team, number), 1)
+        case (driver, ((event, strategy, pos, totalTime), (team, number))) =>
+          ((strategy, event, team), (pos, totalTime, 1))
       }
 
+    // AGGREGAZIONE FINALE
 
-    // OUTPUT FINALE
-    val finalRDD = withDriverInfo
-      .reduceByKey(_ + _)
-      .map {
-        case ((strategy, event, team, number), count) =>
-          (strategy, event, team, number, count)
+    val finalRDD = enriched
+      .reduceByKey { case ((p1, t1, c1), (p2, t2, c2)) =>
+        (p1 + p2, t1 + t2, c1 + c2)
       }
+      .mapValues { case (p, t, c) =>
+        (p.toDouble / c, t / c)
+      }
+
+    // OUTPUT
 
     finalRDD
-      .toDF("strategy", "event", "team", "driverNumber", "count")
+      .map { case ((strategy, event, team), (avgPos, avgTime)) =>
+        (strategy, event, team, avgPos, avgTime)
+      }
+      .toDF("strategy", "event", "team", "avgPosition", "avgTotalTime")
       .coalesce(1)
       .write
       .option("header", "true")
