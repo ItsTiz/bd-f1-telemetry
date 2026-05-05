@@ -8,11 +8,11 @@ object F1DataParsing {
 
     case class RecordKey(
         event: String,
-        sessionType: String,
         driveCodeName: String
     )
 
     case class TelemetryRecord(
+        sessionType: String,
         acc_y: Double,
         brake: Int,
         rpm: Double,
@@ -22,6 +22,7 @@ object F1DataParsing {
     )
 
     case class LapTimeRecord(
+        sessionType: String,
         lapTime: Double,
         tyreCompound: String,
         tyreAgeLaps: Int,
@@ -44,8 +45,9 @@ object F1DataParsing {
             val speed                 = split(16)
             val throttle              = split(17)
 
-            val key   = RecordKey(event, session_type, driver_name)
+            val key   = RecordKey(event, driver_name)
             val value = TelemetryRecord(
+                session_type,
                 acc_y.toDouble,
                 brake.toInt,
                 rpm.toDouble,
@@ -63,9 +65,10 @@ object F1DataParsing {
         try {
             val cols = row.split(commaRegex).map(_.trim)
 
-            val key = RecordKey(cols(0), cols(1), cols(4))   // keyRecord (event, sessionType, driverCode)
+            val key = RecordKey(cols(0), cols(4))   // keyRecord (event, sessionType, driverCode)
 
             val record = LapTimeRecord(
+                sessionType  = cols(1),
                 lapTime      = if (cols(7).nonEmpty && cols(7) != "None") cols(7).toDouble else 0.0,
                 tyreCompound = if (cols(11).nonEmpty && cols(11) != "None") cols(11) else "",
                 tyreAgeLaps  = if (cols(12).nonEmpty) cols(12).toInt else 0,
