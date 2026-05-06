@@ -159,11 +159,20 @@ object PitStrategyJob {
     // AGGREGAZIONE FINALE
 
     val finalRDD = enriched
-      .reduceByKey { case ((p1, t1, c1), (p2, t2, c2)) =>
-        (p1 + p2, t1 + t2, c1 + c2)
+      .reduceByKey {
+        case ((posSum1, timeSum1, count1), (posSum2, timeSum2, count2)) =>
+          (
+            posSum1 + posSum2,
+            timeSum1 + timeSum2,
+            count1 + count2
+          )
       }
-      .mapValues { case (p, t, c) =>
-        (p.toDouble / c, t / c)
+      .mapValues {
+        case (posSum, timeSum, count) =>
+          val avgPosition = posSum.toDouble / count
+          val avgTotalTime = timeSum / count
+
+          (avgPosition, avgTotalTime)
       }
 
     // OUTPUT
