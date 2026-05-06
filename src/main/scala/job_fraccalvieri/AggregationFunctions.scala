@@ -13,13 +13,17 @@ object AggregationFunctions {
 
     val (stint, lapTime, compound) = value
 
-    val updatedStint = acc.stintMap.get(stint) match {
-      case Some((comp, laps)) => (comp, laps + 1)
-      case None               => (compound, 1)
-    }
+    val newMap =
+      if (stint > 0) {
+        val updated = acc.stintMap.get(stint) match {
+          case Some((comp, laps)) => (comp, laps + 1)
+          case None               => (compound, 1)
+        }
+        acc.stintMap + (stint -> updated)
+      } else acc.stintMap
 
     acc.copy(
-      stintMap = acc.stintMap + (stint -> updatedStint),
+      stintMap = newMap,
       totalLapTime = acc.totalLapTime + lapTime,
       totalLapTimeSq = acc.totalLapTimeSq + lapTime * lapTime,
       totalLaps = acc.totalLaps + 1

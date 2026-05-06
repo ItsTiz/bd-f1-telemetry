@@ -4,6 +4,7 @@ import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.sql.{SaveMode, SparkSession}
 import utils.Commons
 import job_fraccalvieri.AggregationFunctions._
+import job_fraccalvieri.LabelingFunctions.assignStrategy
 import job_fraccalvieri.parser.F1DataParsing
 
 object PitStrategyJob {
@@ -57,7 +58,6 @@ object PitStrategyJob {
       .filter(row =>
         row._1.sessionType == "Race" &&
           row._2.lapTime > 0 &&
-          row._2.stintNumber > 0 &&
           row._2.tyreCompound.nonEmpty
       )
 
@@ -135,19 +135,6 @@ object PitStrategyJob {
       .mapValues(mapFunc)
 
     // CLASSIFICAZIONE STRATEGIA
-
-    def assignStrategy(compounds: List[String], avgStint: Double): String = {
-
-      val pattern = compounds.mkString("-")
-
-      if (compounds.size == 1) "ONE_STOP"
-      else if (compounds.size == 2) {
-        if (pattern.contains("SOFT")) "AGGRESSIVE_2STOP"
-        else "STANDARD_2STOP"
-      }
-      else if (compounds.size >= 3) "MULTI_STOP"
-      else "UNKNOWN"
-    }
 
     val classified = aggregated.map {
       case ((event, driver), (_, _, _, avgStint, compounds)) =>
