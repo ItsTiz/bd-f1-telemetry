@@ -65,7 +65,7 @@ object F1DataParsing {
         try {
             val cols = row.split(commaRegex).map(_.trim)
 
-            val key = RecordKey(cols(0), cols(4))   // keyRecord (event, sessionType, driverCode)
+            val key = RecordKey(cols(0), cols(4))   // keyRecord (event, driverCode)
 
             val record = LapTimeRecord(
                 sessionType  = cols(1),
