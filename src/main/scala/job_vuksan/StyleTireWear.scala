@@ -58,17 +58,11 @@ object StyleTireWear {
             // aggregating only by event, so we can get global thresholds
             val trackBaselines = rddDrivingStyleParams
                 .map { case (key, stats) => (key.event, stats) }
-                .aggregateByKey((0.0, 0.0, 0.0, 0L))(
-                    { case ((sumAcc, sumBrk, sumRpm, count), (acc, brk, rpm)) =>
-                        (sumAcc + acc, sumBrk + brk, sumRpm + rpm, count + 1L)
-                    },
-                    { case ((sumAcc1, sumBrk1, sumRpm1, c1), (sumAcc2, sumBrk2, sumRpm2, c2)) =>
-                        (sumAcc1 + sumAcc2, sumBrk1 + sumBrk2, sumRpm1 + sumRpm2, c1 + c2)
-                    }
+                .aggregateByKey(AggregationFunctions.DrivingStyleAcc(0.0, 0.0, 0.0, 0L))(
+                    AggregationFunctions.styleSeqFunc,
+                    AggregationFunctions.styleCombFunc
                 )
-                .mapValues { case (sumAcc, sumBrk, sumRpm, count) =>
-                    (sumAcc / count, sumBrk / count, sumRpm / count)
-                }
+                .mapValues(AggregationFunctions.styleMapFunc)
 
             //  assigning a "style" label to each row based on some parameters that define the style
             //  we assume that above average is considered agressive in at least 2 of three categories such as max lateral
@@ -168,17 +162,12 @@ object StyleTireWear {
 
             val trackBaselinesMap = rddDrivingStyleParams
                 .map { case (key, stats) => (key.event, stats) }
-                .aggregateByKey((0.0, 0.0, 0.0, 0L))(
-                    { case ((sumAcc, sumBrk, sumRpm, count), (acc, brk, rpm)) =>
-                        (sumAcc + acc, sumBrk + brk, sumRpm + rpm, count + 1L)
-                    },
-                    { case ((sumAcc1, sumBrk1, sumRpm1, c1), (sumAcc2, sumBrk2, sumRpm2, c2)) =>
-                        (sumAcc1 + sumAcc2, sumBrk1 + sumBrk2, sumRpm1 + sumRpm2, c1 + c2)
-                    }
+                .aggregateByKey(AggregationFunctions.DrivingStyleAcc(0.0, 0.0, 0.0, 0L))(
+                    AggregationFunctions.styleSeqFunc,
+                    AggregationFunctions.styleCombFunc
                 )
-                .mapValues { case (sumAcc, sumBrk, sumRpm, count) =>
-                    (sumAcc / count, sumBrk / count, sumRpm / count)
-                }.collectAsMap()
+                .mapValues(AggregationFunctions.styleMapFunc)
+                .collectAsMap()
 
             val bTrackBaselines = sc.broadcast(trackBaselinesMap)
 
@@ -215,12 +204,12 @@ object StyleTireWear {
                         Some(((key.event, style, lapRecord.tyreCompound), (tyreState, fuelCorrectedTime)))
                     }
                 }
-                // single groupByKey on (event, style, compound) — collects all (state, lapTime) pairs together
+                // single groupByKey on (event, style, compound), collects all (state, lapTime) pairs together
                 .groupByKey()
                 .flatMap { case ((event, style, compound), items) =>
                     val optTimes = items.collect { case ("OPTIMAL",  t) => t }.toArray.sorted
                     val degTimes = items.collect { case ("DEGRADED", t) => t }.toArray.sorted
-                    
+
                     if (optTimes.length >= 15 && degTimes.length >= 15) {
                         val optMed = optTimes(optTimes.length / 2)
                         val degMed = degTimes(degTimes.length / 2)
