@@ -7,7 +7,7 @@ import job_fraccalvieri.AggregationFunctions._
 import job_fraccalvieri.LabelingFunctions.assignStrategy
 import job_fraccalvieri.parser.F1DataParsing
 
-object PitStrategyJobOptimizedV2 {
+object PitStrategyJobOptimized {
 
   private val path_to_datasets = "/datasets/"
   private val path_ml_laptimes = path_to_datasets + "/laptimes/*.csv"
@@ -82,9 +82,11 @@ object PitStrategyJobOptimizedV2 {
         drivers.toList
           .sortBy(_._3)
           .zipWithIndex
-          .map { case ((driver, strategy, time), idx) =>
-            val (team, _) = broadcastDrivers.value.getOrElse(driver, ("UNK", "0"))
-            ((strategy, event, team), (idx + 1, time, 1))
+          .flatMap { case ((driver, strategy, time), idx) =>
+            broadcastDrivers.value.get(driver).map {
+              case (team, _) =>
+                ((strategy, event, team), (idx + 1, time, 1))
+            }
           }
       }
 
