@@ -1,0 +1,35 @@
+import org.apache.spark.sql.SparkSession
+import parsing.{DatasetParser, DriversParser, LapTimesParser}
+import utils.Commons
+import utils.Commons._
+
+object DatasetsConverter {
+    private val drvInputDir = "/Miami Grand Prix/Practice 1/drivers.json"
+    private val drvOutputDir = "/output/drivers"
+    private val fullDrvInputDir = drvInputDir.toFullLocalPath
+    private val fullDrvOutputDir = drvOutputDir.toFullLocalPath
+
+    private val dsInputDir = "/*/*/*/*_tel.json"
+    private val dsOutputDir = "/output/csv"
+    private val fullDSInputDir = dsInputDir.toFullLocalPath
+    private val fullDSOutputDir = dsOutputDir.toFullLocalPath
+
+    private val ltInputDir = "/*/*/*/laptimes.json"
+    private val ltOutputDir = "/output/laptimes"
+    private val fullLTInputDir = ltInputDir.toFullLocalPath
+    private val fullLTOutputDir = ltOutputDir.toFullLocalPath
+
+
+    def main(args: Array[String]): Unit = {
+        implicit val sparkSession: SparkSession = Commons.initializeSparkSession("test_telemetry");
+
+        val parserDataset = new DatasetParser();
+        parserDataset.jsonToCSV(fullDSInputDir, fullDSOutputDir);
+
+//        val parserLaptimes = new LapTimesParser();
+//        parserLaptimes.jsonToCSV(fullLTInputDir, fullLTOutputDir);
+//
+//        val driverParser = new DriversParser();
+//        driverParser.jsonToCSV(fullDrvInputDir, fullDrvOutputDir);
+    }
+}
