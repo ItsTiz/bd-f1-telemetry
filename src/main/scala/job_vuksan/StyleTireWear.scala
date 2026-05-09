@@ -8,10 +8,8 @@ import utils.Commons
 
 object StyleTireWear {
     private val path_to_datasets: String = "/datasets/"
-
     private val path_ml_telemetry: String = path_to_datasets + "/telemetry/*.csv"
     private val path_ml_laptimes: String = path_to_datasets + "/laptimes/*.csv"
-
     private val path_output_tireWearOnStyle: String = "/output/tireWearOnStyle"
 
     def main(args: Array[String]): Unit = {
@@ -151,7 +149,7 @@ object StyleTireWear {
                 .map { case (key, record) => (key, (record.acc_y, record.brake, record.rpm, record.speed, record.throttle)) }
                 .aggregateByKey(
                     AggregationFunctions.TelemetryAcc(List.empty, 0, 0, 0, 0L),
-                    numPartitions = reducedNumPartitions
+                    numPartitions = reducedNumPartitions // here the partition reduction
                 )(
                     AggregationFunctions.seqFunc,
                     AggregationFunctions.combFunc
@@ -172,12 +170,15 @@ object StyleTireWear {
             val bTrackBaselines = sc.broadcast(trackBaselinesMap)
 
             // Skipping the join (a shuffle) entirely by doing a simple "broadcast join"
-            val rddTelemetryWStyle = rddDrivingStyleParams
+            val styleMap = rddDrivingStyleParams
                 .flatMap { case (key, stats) =>
                     bTrackBaselines.value.get(key.event).map { case (accMean, brkMean, rpmMean) =>
                         (key, LabelingFunctions.assignDrivingStyle(stats)(accMean, brkMean, rpmMean))
                     }
-                }
+                }.collectAsMap()
+
+            // broadcasting it as it should contain around 500 rows, manageable in memory
+            val bStyleMap = sc.broadcast(styleMap)
 
             val rddLapTimesKV = rddLapTimes
                 .filter(row => row != lapTimesHeader)
@@ -189,20 +190,24 @@ object StyleTireWear {
                         record.tyreAgeLaps != 0
                 }
 
-            val dropoffRdd = rddTelemetryWStyle
-                .join(rddLapTimesKV)
-                .flatMap { case (key, (style, lapRecord)) =>
-                    val (_, tyreState) = LabelingFunctions.assignTyreWearFunc((style, lapRecord))
-                    if (tyreState == "DROP"
-                        || lapRecord.pitOut != "None"
-                        || lapRecord.lap <= 3
-                        || lapRecord.tyreCompound == "INTERMEDIATE"
-                        || lapRecord.tyreCompound == "WET") None
-                    else {
-                        val fuelCorrectedTime =
-                            lapRecord.lapTime - ((100 * (1 - lapRecord.lap.toDouble / lapRecord.totalLaps.toDouble)) * 0.03)
-                        Some(((key.event, style, lapRecord.tyreCompound), (tyreState, fuelCorrectedTime)))
+            // Skipping the biggest join (another shuffle) using another broadcast on the style rdd
+            val dropoffRdd = rddLapTimesKV
+                .flatMap { case (key, lapRecord) =>
+                    bStyleMap.value.get(key).flatMap { style =>
+                        val (_, tyreState) = LabelingFunctions.assignTyreWearFunc((style, lapRecord))
+                        if (tyreState == "DROP"
+                            || lapRecord.pitOut != "None"
+                            || lapRecord.lap <= 3
+                            || lapRecord.tyreCompound == "INTERMEDIATE"
+                            || lapRecord.tyreCompound == "WET") None
+                        else {
+                            val fuelCorrectedTime =
+                                lapRecord.lapTime - ((100 * (1 - lapRecord.lap.toDouble / lapRecord.totalLaps.toDouble)) * 0.03)
+                            Some(((key.event, style, lapRecord.tyreCompound), (tyreState, fuelCorrectedTime)))
+                        }
+
                     }
+
                 }
                 // single groupByKey on (event, style, compound), collects all (state, lapTime) pairs together
                 .groupByKey()
