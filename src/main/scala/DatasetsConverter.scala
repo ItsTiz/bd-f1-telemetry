@@ -3,7 +3,7 @@ import parsing.{DatasetParser, DriversParser, LapTimesParser}
 import utils.Commons
 import utils.Commons._
 
-object Test {
+object DatasetsConverter {
     private val drvInputDir = "/Miami Grand Prix/Practice 1/drivers.json"
     private val drvOutputDir = "/output/drivers"
     private val fullDrvInputDir = drvInputDir.toFullLocalPath
@@ -22,7 +22,14 @@ object Test {
 
     def main(args: Array[String]): Unit = {
         implicit val sparkSession: SparkSession = Commons.initializeSparkSession("test_telemetry");
-        val parser = new LapTimesParser();
-        parser.jsonToCSV(fullLTInputDir, fullLTOutputDir);
+
+        val parserDataset = new DatasetParser();
+        parserDataset.jsonToCSV(fullDSInputDir, fullDSOutputDir);
+
+//        val parserLaptimes = new LapTimesParser();
+//        parserLaptimes.jsonToCSV(fullLTInputDir, fullLTOutputDir);
+//
+//        val driverParser = new DriversParser();
+//        driverParser.jsonToCSV(fullDrvInputDir, fullDrvOutputDir);
     }
 }
